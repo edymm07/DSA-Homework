@@ -1,0 +1,181 @@
+Nume : Popa Marian Eduard
+Grupa : 314CC
+
+Tema 2 - Sistem simplificat de indexare a fisierelor
+
+Am lucrat aproximativ o saptamana la aceasta tema. In prima
+zi mi-a luat cam 3 ore sa inteleg cum trebuie sa
+interactioneze arborele Trie cu lista de fisiere si cu
+Heap-ul, mai ales partea cu referintele incrucisate intre
+nodurile terminale ale arborelui si nodurile din lista. Dupa
+ce am inteles logica, am scris pe hartie structurile de
+baza si abia apoi m-am apucat de cod.
+
+In urmatoarele zile am lucrat constant cate 3-4 ore pe zi
+pentru a implementa operatiile pe arbore si logica de Max-Heap pentru TOPK. Cel mai greu
+mi-a fost cu stergerea recursiva din Trie, pentru ca trebuia
+sa ma asigur ca elimin doar nodurile care nu mai sunt
+folosite de alte cuvinte. In total, am stat in jur de 25-26
+de ore la aceasta tema.
+
+1. STRUCTURILE DE DATE
+
+Am inceput prin a defini urmatoarele structuri:
+
+- FileNode: reprezinta un fisier din sistem. Contine ID-ul
+  (sir de caractere), scorul (int), un pointer catre lista
+  de cuvinte-cheie a fisierului si doi pointeri (prev si
+  next) pentru lista dublu inlantuita.
+
+- KwNode: nod pentru lista de cuvinte-cheie a fiecarui
+  fisier. L-am facut separat ca sa pot sterge rapid un
+  cuvant fara sa parcurg tot Trie-ul.
+
+- FileList: structura care tine head-ul si tail-ul listei
+  dublu inlantuite de fisiere.
+
+- FileRef: nod pentru lista de referinte din nodurile
+  terminale ale Trie-ului. Am ales lista simplu inlantuita
+  pentru ca insertul si stergerea sunt foarte rapide.
+
+- TrieNode: nodul din arborele de regasire. Are un vector de
+  27 de pointeri catre fii (26 pentru litere + 1 slot
+  special pentru a marca nodul ca terminal) si un pointer
+  catre lista de referinte.
+
+- Heap: structura pentru Max-Heap, implementata cu vector
+  alocat dinamic, capacitate care se dubleaza automat cand
+  se umple.
+
+
+2. LISTA DE FISIERE
+
+Am folosit o lista dublu inlantuita unde stochez fisierele
+in ordinea in care apar in sistem.
+Operatiile pe lista:
+  - fl_add: adauga la sfarsit;
+  - fl_find: cautare liniara dupa ID;
+  - fl_remove: scoate un nod si reface legaturile.
+
+Fiecare nod de fisier contine si o sub-lista cu cuvintele
+sale cheie. Asta ma ajuta la DEL, unde trebuie sa stiu ce
+cuvinte trebuie scoase din Trie pentru fisierul respectiv,
+fara sa parcurg tot arborele.
+
+3. ARBORELE DE REGASIRE (Trie)
+
+L-am implementat ca un arbore multicai de regasire unde
+fiecare nod are un vector de pointeri catre fii. Am rezervat
+slot-uri pentru:
+  - indicii 0-25: literele 'a'-'z';
+  - indicele 26 (TERM): folosit ca marker pentru nod
+    terminal. Daca acest slot nu e NULL, nodul reprezinta
+    finalul unui cuvant valid.
+
+In nodurile terminale am adaugat o lista de referinte
+(FileRef) catre fisierele din lista principala care contin
+acel cuvant. Astfel, cand fac FIND pe un cuvant, nu trebuie
+sa parcurg toata lista de fisiere, doar lista de referinte
+din nodul terminal.
+
+Stergerea cuvintelor (trie_delete_word) e recursiva si
+elimina nodurile care:
+  - nu mai sunt terminale pentru alt cuvant;
+  - nu mai au niciun fiu.
+Procesul se opreste cand intalneste primul nod care e inca
+util.
+
+4. HEAP-UL
+
+Pentru operatia TOPK, am implementat un Max-Heap bazat pe un
+vector alocat dinamic. Functiile principale:
+  - urca: pentru insert, urca elementul nou pana la pozitia
+    corecta comparandu-l cu parintele;
+  - coboara: pentru extract, mut ultimul element pe radacina
+    si il cobor pana ajunge in pozitia corecta;
+  - heap_insert: adauga la final si urca;
+  - heap_extract_max: returneaza radacina si reorganizeaza.
+
+Prioritatea este data de scorul de relevanta. La scoruri
+egale am folosit ordinea lexicografica a ID-urilor (ID mai
+mic = prioritate mai mare), conform cerintei din enunt.
+Asta se vede in functia mai_mare() care e folosita peste tot
+in heap.
+
+Operatia ADD:
+  Verific daca ID-ul exista deja in lista. Daca da, afisez
+  EXISTS. Daca nu, creez un FileNode nou si il inserez la
+  finalul listei. Pentru cuvintele primite, le sortez intai
+  ca sa pot elimina usor duplicatele. Apoi le inserez in Trie si adaug
+  referinta catre fisier in nodul terminal respectiv.
+
+Operatia DEL:
+  Caut fisierul in lista. Daca nu exista, afisez NOT FOUND.
+  Daca exista, parcurg lista lui de cuvinte cheie si pentru
+  fiecare cuvant elimin referinta din Trie. Daca un nod
+  terminal ramane fara referinte, apelez functia de
+  stergere recursiva care elimina nodurile inutile.
+  In final scot fisierul din lista.
+
+Operatiile ADDKW si DELKW:
+  Actualizeaza consistent atat lista de cuvinte a fisierului,
+  cat si structura arborelui Trie. La ADDKW, daca cuvantul
+  exista deja la fisier, afisez OK fara sa modific nimic. La
+  DELKW, daca cuvantul nu exista la fisier, la fel.
+  La DELKW, daca dupa stergere fisierul ramane fara niciun
+  cuvant cheie, il scot si pe el din lista.
+
+Operatia FIND:
+  Caut cuvantul in Trie parcurgand caracterele. Daca ajung
+  intr-un nod terminal cu referinte, copiez referintele
+  intr-un vector, sortez vectorul lexicografic dupa ID si
+  afisez rezultatele. Daca nu exista, afisez EMPTY.
+
+Operatia TOPK:
+  Gasesc nodul terminal pentru cuvant si bag toate
+  referintele intr-un Max-Heap. Apoi extrag primele k
+  elemente (sau toate, daca sunt mai putine de k). Heap-ul
+  ma asigura ca obtin fisierele in ordinea scorului
+  descrescator, iar la scoruri egale in ordine lexicografica.
+
+Operatia PRINT:
+  Parcurg arborele recursiv in ordine alfabetica (de la 'a'
+  la 'z') folosind un buffer in care construiesc cuvantul
+  pe masura ce cobor. Cand ajung la un nod terminal, afisez
+  cuvantul, numarul de fisiere si ID-urile lor sortate
+  lexicografic. Astfel obtin automat ordinea lexicografica
+  a cuvintelor, fara structura auxiliara.
+
+Operatia PREFIX (Bonus):
+  Identific nodul corespunzator ultimului caracter al
+  prefixului in Trie. De acolo parcurg tot subarborele
+  (DFS) si colectez toate referintele de la toate nodurile
+  terminale intalnite. Sortez lexicografic vectorul de
+  rezultate si elimin duplicatele (un fisier poate aparea
+  prin mai multe cuvinte cu acelasi prefix - de exemplu
+  File2 are si "patrat" si "patrulater", ambele incep cu
+  "pat", dar trebuie afisat o singura data).
+
+In main:
+  1. Deschid fisierele indexare.in si indexare.out.
+  2. Initializez lista de fisiere si radacina arborelui
+     Trie.
+  3. Citesc numarul de operatii q.
+  4. Aloc dinamic un buffer mare pentru linie, pentru ca
+     o comanda ADD poate avea foarte multe cuvinte.
+  5. Intr-un loop, citesc fiecare linie cu fgets, curat
+     \n si \r de la final, separ comanda de restul liniei
+     cu strtok si apelez functia corespunzatoare.
+  6. La final, eliberez toata memoria:
+     - vectorul de linie;
+     - arborele Trie (recursiv);
+     - lista de fisiere si toate sub-listele lor;
+     - inchid fisierele.
+
+Rulez checker-ul si obtin punctajul maxim (100/100 local +
+20 puncte bonus pentru PREFIX).
+
+Am verificat tema cu Valgrind:
+  valgrind --leak-check=full ./search_index
+si primesc mesajul "All heap blocks were free -- no leaks
+are possible", deci nu am pierderi de memorie.
